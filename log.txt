@@ -1,0 +1,19 @@
+/Users/ramindalasith/Documents/opencv/simple_demo/cmake-build-debug-coverage/simple-demo ../MARBLE8.png ../sample.mov 1
+Option 1- Encode 2- decode
+1
+Option 1 -Image any number - video
+1
+Enter file Name (* for dft)
+*
+Enter encryption key
+hello
+Enter message to encrypt
+hello what is your name
+missing key generating
+missing key size 23
+Key Generated befor index : fh>e7l=l[ob zwEhKa<tM niIsa Zylofu>rw [nva�mSe�,f:dEIKcFoiAl}bRCJkaqL/:0&iQfKytH*8uO2Tc>B?yT>w3q!#$r/*n!b>%e4f!Sw!}LACt@KQ2[rpusobCr;nUM.kAJN0vlqL9Sfly%1r}X$BH>BPNGU#45QW0t[dSp!Qb!8YhAMfGIS&1*PwPyFQ^f
+Key Generated index: 9
+Key Generated first: 1
+Key Generated : fh>e7l=l[ob zwEhKa<tM niIsa Zylofu>rw [nva�mSe�,f:dEIKcFoiAl}bRCJkaqL/:0&iQfKytH*8uO2Tc>B?yT>w3q!#$r/*n!b>%e4f!Sw!}LACt@KQ2[rpusobCr;nUM.kAJN0vlqL9Sfly%1r}X$BH>BPNGU#45QW0t[dSp!Qb!8YhAMfGIS&1*PwPyFQ^f
+
+Process finished with exit code 0
