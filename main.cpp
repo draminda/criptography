@@ -1,11 +1,14 @@
 
 #include <iostream>
+#include <fstream>
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
 
 using namespace std;
 using namespace cv;
 
+const size_t BUFFER_SIZE = 1024;
 const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~`!@#$%^&*(<>?:{},./;[]|";
 /**
  *
@@ -38,6 +41,65 @@ set<int> genNumbers (int count,int rows ,int cols) {
     }
     return numbers;
 }
+
+void decodeImage(Mat img,int x,int y,int frame,string &decodedKey){
+    Point_<int> po;
+    Point_<int> po1;
+    po.y = y;
+    po.x = x;
+    po1.y=po.y+1;
+    po1.x=po.x+1;
+    unsigned int key =( unsigned int )img.at<uchar>(po);
+    unsigned int  key1 =( unsigned int )img.at<uchar>(po1);
+    cout <<"Frame : "<<frame<< " po.y "<<po.y<<" "<<" po.x "<<po.x<<" key1 "<< key1 <<" key "<<key<<endl;
+    key = key + key1*255;
+    decodedKey.push_back((unsigned char )key);
+}
+
+
+void generate(VideoCapture inputVideo,string key,string &decodedKey){
+    int i = -1;
+    int frameNumber = inputVideo.get(CAP_PROP_FRAME_COUNT);
+    int numberOfHiddenFrames = key.size()/6;
+    cout<<"number of frames : "<<frameNumber<<endl;
+    cout<<"number of Hidden Frames : "<<numberOfHiddenFrames<<endl;
+    while (true) {
+        i++;
+        Mat frame;
+        inputVideo >> frame;
+        if (frame.empty() || i>=numberOfHiddenFrames)
+            break;
+        if(i<=numberOfHiddenFrames) {
+             int y = (unsigned char)key.at(i*6);
+            y = y+ (unsigned char) key.at(i*6+1)*255;
+             int x =  (unsigned char)key.at(i*6+2);
+            x = x+ (unsigned char)key.at(i*6+3)*255;
+             int frameNo =  (unsigned char) key.at(i*6+4);
+            frameNo = frameNo+ (unsigned char)key.at(i*6+5)*255;
+            decodeImage(frame,x,y,frameNo,decodedKey);
+        }
+    }
+}
+
+void generate(Mat image,string key,string &decodedKey){
+    int i = -1;
+    int numberOfHiddenFrames = key.size()/3;
+    cout<<"number of Hidden Frames : "<<numberOfHiddenFrames<<endl;
+    while (i++) {
+        if (i>numberOfHiddenFrames)
+            break;
+        if(i<=numberOfHiddenFrames) {
+            int y = (unsigned char)key.at(i*6);
+            y = y+ (unsigned char) key.at(i*6+1)*255;
+            int x =  (unsigned char)key.at(i*6+2);
+            x = x+ (unsigned char)key.at(i*6+3)*255;
+            int frameNo =  (unsigned char) key.at(i*6+4);
+            frameNo = frameNo+ (unsigned char)key.at(i*6+5)*255;
+            decodeImage(image,x,y,frameNo,decodedKey);
+        }
+    }
+}
+
 /**
  *
  * @param img
@@ -47,32 +109,37 @@ set<int> genNumbers (int count,int rows ,int cols) {
  * @return
  */
 Mat showImage(Mat img,int frame,string keyToHide,string &finalKey){
-    cout <<"Frame : "<<frame<< " Rows :" << img.rows << " Cols : " << img.cols <<" key to hide "<<keyToHide<< endl;
-    set<int> numbers = genNumbers(keyToHide.size(),img.rows,img.cols);
-    cout<<" -- Hidden locations --"<<endl;
-    for(int i=0;i<keyToHide.size();i++){
-        cout<<" row: "<<*next(numbers.begin(),i*2)<< " cols : "<<*next(numbers.begin(),i*2+1)<<endl;
-        Point_<int> po;
-        po.y = *next(numbers.begin(),i*2);
-        po.x= *next(numbers.begin(),i*2+1);
-        img.at<uchar>(po)=keyToHide.at(i);
-        finalKey.push_back(po.y);
-        finalKey.push_back(po.x);
-    }
-    cout<<" --------"<<endl;
-    cout<<" --------\n"<<finalKey<<"\n---------"<<endl;
-    /*for (int i = 0; i < img.rows; i++) {//loop for rows//
-        for (int j = 0; j < img.cols*3; j++) {
+    if(keyToHide!=""  && keyToHide.size()>0) {
+        set<int> numbers = genNumbers(keyToHide.size(), img.rows, img.cols);
+        for (int i = 0; i < keyToHide.size(); i++) {
             Point_<int> po;
-            po.y = i;
-            po.x= j;
-            int pixcel = (int) img.at<uchar>(po);
-            img.at<uchar>(po) = pixcel;
+            Point_<int> po1;
+            po.y = *next(numbers.begin(), i * 2);
+            po.x = *next(numbers.begin(), i * 2 + 1);
+            po1.y=po.y+1;
+            po1.x=po.x+1;
+
+            unsigned int kyInt = keyToHide.at(i);
+            unsigned int kryC = kyInt%255;
+            img.at<uchar>(po) = (kyInt/255);
+            img.at<uchar>(po1) = kryC;
+
+            unsigned char y = po.y%255;
+            unsigned char x = po.x%255;
+            unsigned char f = frame%255;
+            finalKey.push_back(y);
+            finalKey.push_back(po.y/255);
+            finalKey.push_back(x);
+            finalKey.push_back(po.x/255);
+            finalKey.push_back(frame);
+            finalKey.push_back(f/255);
+            cout <<"Frame : "<<frame<< " Rows :" << img.rows << " Cols : " << img.cols <<" key to hide "<<keyToHide.at(i)<<" kyInt "<<kyInt/255 <<" kryC " <<kryC<<" po.y "<<po.y<<" "<<po.y/255 <<" po.x "<<po.x<<" "<<po.x/255<<endl;
+
         }
-    }*/
-    namedWindow("Creating Your video ", cv::WINDOW_AUTOSIZE);
-    imshow("frames "+frame, img);
-    waitKey(25);
+        namedWindow("Creating Your video", cv::WINDOW_AUTOSIZE);
+        imshow("frames", img);
+        waitKey(20);
+    }
     return img;
 }
 /**
@@ -89,13 +156,14 @@ void createVideo(VideoCapture inputVideo,VideoWriter &outputVideo,string keyToHi
     cout<<"number of frames : "<<frameNumber<<endl;
     cout<<"mod Of Frames : "<<modOfFrames<<endl;
     while (i++) {
-        string key=keyToHide.substr(i,i==frameNumber?keyToHide.size():modOfFrames*(i+1));
-        cout<<"key : "<<key<<endl;
         Mat frame;
         inputVideo >> frame;
         if (frame.empty())
             break;
-        frame = showImage(frame, i - 1,key,finalKey);
+        if(modOfFrames*(i)<=keyToHide.size()) {
+            string key = keyToHide.substr(i*modOfFrames, 1);
+            frame = showImage(frame, i - 1, key, finalKey);
+        }
         outputVideo << frame;
     }
 }
@@ -136,7 +204,7 @@ char getRandom(){
  * @param size
  */
 void populate(string &key,bool first,int size){
-    if(key.size()<200){
+    if(key.size()<50){
         char cch =  getRandom();
         if (first) {
             key.push_back(cch);
@@ -150,7 +218,6 @@ void populate(string &key,bool first,int size){
         populate(key,first,size);
     }
     else {
-        cout << "missing key generating" << endl;
         char cch =  getRandom();
         if (first) {
             key.push_back(cch);
@@ -159,7 +226,6 @@ void populate(string &key,bool first,int size){
             key.push_back(size);
             key.push_back(cch);
         }
-        cout << "missing key size "<<size << endl;
     }
 
 }
@@ -175,7 +241,7 @@ void  generateKey(string  msg,string &dKey,string &dKeyTemp,char type){
     int index =  rand()%10;
     bool first = rand()%2;
     int size  = msg.size();
-    if(size>100){
+    if(size>25){
         cout<<"msg is too long "<<endl;
         msg = msg.substr(0,99);
         cout<<"msg will converted to :  "<<msg<<endl;
@@ -211,9 +277,10 @@ void  generateKey(string  msg,string &dKey,string &dKeyTemp,char type){
  * @param eKey
  * @param msg
  */
-void generateMsg(string eKey,string &msg,char &type){
+void generateMsg(string eKey,string &msg){
     int size  = eKey.size();
     int amend  = 0 ;
+    char type;
     cout<<eKey.at(size-1);
     cout<<eKey.at(size-2);
     int index = int (eKey.at(size-1));
@@ -231,7 +298,7 @@ void generateMsg(string eKey,string &msg,char &type){
         }
         i+=2;
     }
-    cout<<"eKey is :"<<eKey<<endl;
+    cout<<"Key is :"<<eKey<<endl;
     cout<<"msg is :"<<msg<<endl;
     cout<<"it's is :"<<type<<endl;
 }
@@ -243,15 +310,15 @@ void generateMsg(string eKey,string &msg,char &type){
  * @return
  */
 int main(int argc, char** argv) {
-    int option;
-    int type;
-    char typeDecoded;
-    const size_t BUFFER_SIZE = 1024;
+    int option,type;
     char *fileName= new char[BUFFER_SIZE];
+
     string key = "";
     string msg= "";
+    string dKeyLocation= "";
     string dKey= "";
     string finalKey="";
+
     cout<<"Option 1- Encode 2- decode"<<endl;
     cin>>option;
     cout << "Option 1 -Image any number - video" << endl;
@@ -265,8 +332,8 @@ int main(int argc, char** argv) {
         cout << "Enter message to encrypt" << endl;
         getline(cin, msg);
         generateKey(msg,key,dKey,type);
+        cout<<"key to hide "<<dKey<<endl;
         msg = "";
-        //generateMsg(dKey,msg,typeDecoded);
         if (type == 1) {
             if (strcmp(fileName, "*") == 0) {
                 fileName = argv[1];
@@ -278,6 +345,7 @@ int main(int argc, char** argv) {
                 Mat outImg =  showImage(img, 1,dKey,finalKey);
                 imwrite("./out.jpg", outImg);
             }
+
         } else {
             if (strcmp(fileName, "*") == 0) {
                 fileName = argv[2];
@@ -293,19 +361,103 @@ int main(int argc, char** argv) {
                 inputVideo.release();
             }
         }
-        std::ofstream out("./output.txt");
+        cout<<finalKey<<endl;
+        ofstream out("./output.txt");
         out << finalKey;
         out.close();
+
+
+
+
+
+        cout << "Enter file Name and location * for dft" << endl;
+        cin >> fileName;
+        cout << "Enter decryption key location * for dft" << endl;
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        getline(cin, dKeyLocation);
+        ifstream inFile;
+        if (dKeyLocation == "*") {
+            dKeyLocation = argv[3];
+        }
+        inFile.open(dKeyLocation);
+        if (!inFile) {
+            cerr << "Unable to open file datafile.txt";
+
+        }
+        else {
+            dKey = "";
+
+            cout<<finalKey<<endl;
+            if(type ==1){
+                if (strcmp(fileName, "*")== 0) {
+                    fileName = argv[5];
+                }
+                Mat img = imread(fileName);
+                generate( img,finalKey,dKey);
+            }
+            else{
+                if (strcmp(fileName, "*")== 0) {
+                    fileName = argv[4];
+                }
+                VideoCapture inputVideo(fileName);
+                generate( inputVideo, finalKey,dKey);
+            }
+            cout<<"Final key : "<<dKey<<endl;
+            generateMsg(dKey,msg);
+        }
     }
     else{
-        cout << "Enter file Name and location " << endl;
+        cout << "Enter file Name and location * for dft" << endl;
         cin >> fileName;
+        cout << "Enter decryption key location * for dft" << endl;
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        cout << "Enter decryption key" << endl;
-        getline(cin, dKey);
-        generateMsg(dKey,msg,typeDecoded);
+        getline(cin, dKeyLocation);
+        ifstream inFile;
+        if (dKeyLocation == "*") {
+            dKeyLocation = argv[3];
+        }
+        inFile.open(dKeyLocation);
+        if (!inFile) {
+            cerr << "Unable to open file datafile.txt";
+
+        }
+        else {
+            dKey = "";
+            if (inFile.is_open()) {
+                ifstream t("file.txt");
+                stringstream buffer;
+                buffer << t.rdbuf();
+                while (!inFile.eof()) {
+                    string output;
+                    inFile >> output;
+                    dKey.append(output);
+                }
+            }
+            cout<<dKey<<endl;
+            if(type ==1){
+                if (strcmp(fileName, "*")== 0) {
+                    fileName = argv[5];
+                }
+                Mat img = imread(fileName);
+                generate( img,dKey,finalKey);
+            }
+            else{
+                if (strcmp(fileName, "*")== 0) {
+                    fileName = argv[4];
+                }
+                VideoCapture inputVideo(fileName);
+                generate( inputVideo, dKey,finalKey);
+            }
+            cout<<"Final key : "<<finalKey<<endl;
+            generateMsg(finalKey,msg);
+        }
     }
     destroyAllWindows();
     fileName = NULL;
+    key = "";
+    msg= "";
+    dKeyLocation= "";
+    dKey= "";
+    finalKey="";
     return 0;
 }
