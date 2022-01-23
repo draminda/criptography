@@ -2,14 +2,14 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
-#include <filesystem>
+#include <omp.h>
 
 using namespace std;
 using namespace cv;
 
 const size_t BUFFER_SIZE = 1024;
 const int msgSize = 25 ;
-const int charRandomSize = 245 ;//coz adding another 10 as random
+const int charRandomSize = 255 ;//coz adding another 10 as random
 const char charset[] = "0edfrgu99jnfrtyu89iujkhgt678TYUIOP{P:><LOP)(*&^%^TGBHJKIUYTF123456789ABCDEF12345678GHIJKLMNQWSDFGBNMZXCFVGHJKIOqwertyuikmnbgfdrtghb345670987hbnm,m098765tgbnklp[p;lkjhgfghjertyhnbvcfghOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~`!@#$%^&*(<>?:{},./;[]|";
 
 /**
@@ -19,7 +19,7 @@ const char charset[] = "0edfrgu99jnfrtyu89iujkhgt678TYUIOP{P:><LOP)(*&^%^TGBHJKI
  * @param size
  */
 void genRandomNumber(set<int> &numbers, int maxNumCanAssign, int size){
-    numbers.insert(rand()%(maxNumCanAssign-100));
+    numbers.insert(rand()%(maxNumCanAssign));
     if(numbers.size() == size){
         genRandomNumber(numbers, maxNumCanAssign, numbers.size());
     }
@@ -54,13 +54,11 @@ void decodeImageIndex(Mat imageToDecode,int col,int row,int frm,string &decodedK
     Point_<int> po;
     po.y = row;
     po.x = col;
-    unsigned char keyMultiplayer = imageToDecode.at<cv::Vec3b>(po)[0];
-    unsigned char keyRemainder = imageToDecode.at<cv::Vec3b>(po)[1];
-    unsigned char frame = imageToDecode.at<cv::Vec3b>(po)[2];
-    unsigned char keyAsInt = keyMultiplayer * charRandomSize + keyRemainder;
+    float keyAsInt = imageToDecode.at<cv::Vec2f>(po)[0];
+    unsigned char frame = imageToDecode.at<cv::Vec2f>(po)[1];
 
 
-    cout<<"frame "<<frm<<" decode pix x "<<po.x<< " pix y "<<po.y<<" key "<< (char)keyAsInt<<" keyMultiplayer "<<keyMultiplayer<<" keyRemainder "<<keyRemainder<< " frame "<<frame<<endl;
+    cout<<"frame "<<frm<<" decode pix x "<<po.x<< " pix y "<<po.y<<" key "<< (char)keyAsInt<< " frame "<<frame<<endl;
 
     decodedKeyFromMedia.push_back((unsigned char )keyAsInt);
 }
@@ -93,6 +91,8 @@ void decodeImage(Mat frame,string decodedKey,int index, string &decodedKeyFromMe
 void decrypt(VideoCapture inputVideo,string decodedKey,string &decodedKeyFromMedia){
     int i = -1;
     int numberOfHiddenFrames = decodedKey.size()/6;
+#pragma omp parallel
+#pragma omp while
     while (true) {
         i++;
         Mat frame;
@@ -115,6 +115,8 @@ void decrypt(VideoCapture inputVideo,string decodedKey,string &decodedKeyFromMed
 void decrypt(Mat image,string decodedKey,string &decodedKeyFromMedia){
     int i = -1;
     int numberOfHiddenFrames = decodedKey.size()/6;
+#pragma omp parallel
+#pragma omp while
     while (true) {
         i++;
         if (i>=numberOfHiddenFrames)
@@ -146,22 +148,20 @@ void addKey(int key,string &encodedKey){
 void encodeImage(Mat &imageToEncode,int frame,string keyForEncode,string &encodedKey){
     if(keyForEncode!=""  && keyForEncode.size()>0) {
         set<int> numbers = genRandomNumbers(keyForEncode.size(), imageToEncode.rows, imageToEncode.cols);
-
+#pragma omp parallel
+#pragma omp parallel for
         for (int i = 0; i < keyForEncode.size(); i++) {
             Point_<int> po;
             po.x = *next(numbers.begin(), i * 2);
             po.y = *next(numbers.begin(), i * 2 + 1);
 
             //hide Key
-            unsigned char keyAsInt = keyForEncode.at(i);
-            unsigned char keyReminder = keyAsInt%charRandomSize;
-            unsigned char keyMultiplayer = (keyAsInt/charRandomSize);
-            imageToEncode.at<cv::Vec3b>(po)[0]=keyMultiplayer;
-            imageToEncode.at<cv::Vec3b>(po)[1]=keyReminder;
-            imageToEncode.at<cv::Vec3b>(po)[2]=frame;
+            float keyAsInt = keyForEncode.at(i);
+            imageToEncode.at<cv::Vec2f>(po)[0]=keyAsInt;
+            imageToEncode.at<cv::Vec2f>(po)[1]=frame;
 
 
-            cout<<"frame :"<< frame<<" encode pix x "<<po.x<< " pix y "<<po.y<<" keyAsInt "<<(unsigned char)keyAsInt<< " keyMultiplayer "<< keyMultiplayer<< " keyReminder "<<keyReminder<<endl;
+            cout<<"frame :"<< frame<<" encode pix x "<<po.x<< " pix y "<<po.y<<" keyAsInt "<<(unsigned char)keyAsInt<<endl;
 
             //gen key location
             addKey(po.y,encodedKey);
@@ -181,6 +181,8 @@ void createVideo(VideoCapture inputVideo,VideoWriter &outputVideo,string keyForE
     int i = 1;
     int frameNumber = inputVideo.get(CAP_PROP_FRAME_COUNT);
     int modOfFrames = keyForEncode.size()/frameNumber + 1;
+#pragma omp parallel
+#pragma omp while
     while (i++) {
         Mat frame;
         inputVideo >> frame;
@@ -193,7 +195,7 @@ void createVideo(VideoCapture inputVideo,VideoWriter &outputVideo,string keyForE
         outputVideo<<frame;
         namedWindow("Creating Your video ", cv::WINDOW_AUTOSIZE);
         imshow("frames ", frame);
-        waitKey(50);
+        waitKey(2);
     }
 }
 /**
@@ -213,7 +215,7 @@ VideoWriter createVideoHeading(VideoCapture inputVideo, string  &outPutFileName,
     //outputVideo.open(outPutFileName, inputVideo.get(CAP_PROP_BACKEND),VideoWriter::fourcc(EXT[0], EXT[1], EXT[2], EXT[3]), inputVideo.get(CAP_PROP_FPS), S, true);
     if (!outputVideo.isOpened()){
         cerr  << "Could not open the output video for write: " << outPutFileName << endl;
-        exit;
+
     }
     cout << "Input frame resolution: Width=" << S.width << "  Height=" << S.height
          << " of nr#: " << inputVideo.get(CAP_PROP_FRAME_COUNT) << endl;
@@ -225,7 +227,7 @@ VideoWriter createVideoHeading(VideoCapture inputVideo, string  &outPutFileName,
  * @return random char from 0-245
  */
 char getRandom() {
-    return charset[ rand() % charRandomSize ];
+    return charset[ rand() % 240 ];
 }
 
 /**
@@ -291,11 +293,11 @@ void generateKey(string msgToEncode, string &keyForEncode, char typeOfMedia){
     for (int i=0; i<size; i++) {
         cch = getRandom();
         if (first) {
-            keyForEncode.push_back(msgToEncode[i] + index);
+            keyForEncode.push_back(msgToEncode[i]);
             keyForEncode.push_back(cch + index);
         } else {
             keyForEncode.push_back(cch + index);
-            keyForEncode.push_back(msgToEncode[i] + index);
+            keyForEncode.push_back(msgToEncode[i]);
         }
     }
     populate(keyForEncode, first, size);
@@ -321,10 +323,10 @@ void generateMsg(string decodedKeyFromMedia, string &decodedMsg){
     if(msgSize>0)
     for(int i=0;i<msgSize*2+2;){
         if(i==0){
-            cout <<"taken from "<<((((int) (decodedKeyFromMedia.at(amend + i))-index)==1)?"Image":"Video")<<endl;
+            cout <<"taken from "<<((((int) (decodedKeyFromMedia.at(amend + i)))==1)?"Image":"Video")<<endl;
         }
         else {
-            decodedMsg.push_back(decodedKeyFromMedia.at(amend + i)-index);
+            decodedMsg.push_back(decodedKeyFromMedia.at(amend + i));
         }
         i+=2;
     }
@@ -442,13 +444,85 @@ void getOutPutFile(string &outPutFileName,string fileName ){
     outPutFileName = "./out."+NAME;
 }
 
+void convolutionFrame(Mat &imageToConvolute,float matrix[3][3],float edge,int frame ){
+#pragma omp parallel
+#pragma omp parallel for reduction(+:i,j)
+    for(int i=0;i<imageToConvolute.rows;i++){
+        for(int j=0;j<imageToConvolute.cols;j++){
+            Mat_<float> custom(3, 3);
+            cout<<"I*J "<<i<<"*"<<j<<" frame "<<frame<< " b - "<< imageToConvolute.at<float>(i,j);
+            imageToConvolute.at<float>(i,j)=
+                    + i<1 && j<1? edge : imageToConvolute.at<float>(i-1,j-1)*matrix[0][0]
+                    + i<1 ?       edge: imageToConvolute.at<float>(i-1,j)*matrix[1][0]
+                    + i<1 ?       edge: imageToConvolute.at<float>(i-1,j+1)*matrix[2][0]
+                    + j<1 ?       edge: imageToConvolute.at<float>(i,j-1)*matrix[0][1]
+                    + imageToConvolute.at<float>(i,j)*matrix[1][1]
+                    + imageToConvolute.at<float>(i,j+1)*matrix[2][1]
+                    + j<1 ?       edge: imageToConvolute.at<float>(i+1,j-1)*matrix[0][2]
+                    + imageToConvolute.at<float>(i+1,j)*matrix[1][2]
+                    + imageToConvolute.at<float>(i+1,j+1)*matrix[2][2];
+            cout<<" - " << imageToConvolute.at<float>(i,j)<<endl;
+
+        }
+
+    }
+
+}
+
+/**
+ *
+ * @param typeOfMedia
+ * @param fileName
+ * @param matrix
+ * @param edge
+ * @param outPutFileName
+ */
+void convolution(int typeOfMedia,string fileName,float matrix[3][3],float edge,string outPutFileName){
+    Mat_<float> custom(3, 3);
+    if (typeOfMedia == 1) {
+        Mat imageToConvolute = imread(fileName);
+        if (imageToConvolute.empty()) {
+            cerr<< "Not a valid image file "<< fileName<< endl;
+        } else {
+            convolutionFrame(imageToConvolute,matrix,edge,1 );
+            imwrite(outPutFileName, imageToConvolute);
+            cout<<"create file   in "<<outPutFileName;
+        }
+    } else {
+        VideoCapture videoToConvolute(fileName);
+        if (!videoToConvolute.isOpened()) {
+            cerr<< "Error opening video stream or file "<< fileName<< endl;
+        } else {
+            VideoWriter outputVideo;
+            createVideoHeading(videoToConvolute, outPutFileName,outputVideo);
+            int i=-1;
+#pragma omp parallel
+#pragma omp while
+            while (true) {
+                Mat frame;
+                videoToConvolute >> frame;
+                if (frame.empty())
+                    break;
+                convolutionFrame(frame,matrix,edge,i++ );
+                outputVideo<<frame;
+                namedWindow("Creating Your video ", cv::WINDOW_AUTOSIZE);
+                imshow("frames ", frame);
+                waitKey(2);
+            }
+            outputVideo.release();
+            videoToConvolute.release();
+            cout<<"create file   in "<<outPutFileName;
+        }
+    }
+}
+
 /**
  *
  * @param argv
  * @param fileName
  * @param typeOfMedia
  */
-void getFileType(char** argv, string &fileName,int typeOfMedia ){
+void getFileType(char** argv, string &fileName,int typeOfMedia){
     if (fileName == "*") {
         fileName = typeOfMedia==1?  argv[1]:argv[2];
     }
@@ -475,17 +549,31 @@ int main(int argc, char** argv) {
     string keyForDecode = "";
     string keyForEncode = "";
     string encodedKey = "";
+    float matrix[3][3];
 
-    cout<< " 1- Encode 0- Decode"<< endl;
+    cout<< "0 - for apply filter  1- Encode 0- Decode"<< endl;
     cin>> option;
     cout<< " 1 -Image any number - Video" << endl;
     cin>> typeOfMedia;
+    cout<< "Enter media file Name (* for dft) for process" << endl;
+    cin>> fileName;
 
-    if(option == 1) {
-
-
-        cout<< "Enter media file Name (* for dft) for encode" << endl;
-        cin>> fileName;
+    if(option == 0) {
+        getFileType(argv, fileName, typeOfMedia);
+        getOutPutFile( outPutFileName,fileName );
+        float edge;
+        cout << " elements for filter : "<<endl;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                cout << " element in " << i + 1 << " * " << j + 1 << " : ";
+                cin >> matrix[i][j];
+            }
+        }
+        cout << " elements for edge : "<<endl;
+        cin >> edge;
+        convolution( typeOfMedia, fileName, matrix, edge, outPutFileName);
+    }
+    else if(option == 1) {
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
         cout<< "Enter message to encrypt" << endl;
         getline(cin, msgToEncode);
@@ -510,10 +598,8 @@ int main(int argc, char** argv) {
         cout<<"Hidden msg  "<<msgToEncode<<endl<<endl;
         cout<<"Massage found "<<decodedMsg<<endl;
     }
-    else{
-        outPutFileName = "";
-        cout<< "Enter file Name and location * for dft" << endl;
-        cin>> outPutFileName;
+    else if(option ==2 ){
+        outPutFileName = fileName;
         cout<< "Enter decryption key location * for dft" << endl;
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
         getline(cin, decodeKeyLocation);
@@ -532,6 +618,6 @@ int main(int argc, char** argv) {
     keyForDecode = "";
     keyForEncode = "";
     encodedKey = "";
-
+    argv=NULL;
     return 0;
 }

@@ -32,5 +32,5 @@
 *.app
 
 
-cmake-*/
-cmake-*
+cmake*/
+cmake*/*
