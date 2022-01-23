@@ -91,8 +91,6 @@ void decodeImage(Mat frame,string decodedKey,int index, string &decodedKeyFromMe
 void decrypt(VideoCapture inputVideo,string decodedKey,string &decodedKeyFromMedia){
     int i = -1;
     int numberOfHiddenFrames = decodedKey.size()/6;
-#pragma omp parallel
-#pragma omp while
     while (true) {
         i++;
         Mat frame;
@@ -115,8 +113,6 @@ void decrypt(VideoCapture inputVideo,string decodedKey,string &decodedKeyFromMed
 void decrypt(Mat image,string decodedKey,string &decodedKeyFromMedia){
     int i = -1;
     int numberOfHiddenFrames = decodedKey.size()/6;
-#pragma omp parallel
-#pragma omp while
     while (true) {
         i++;
         if (i>=numberOfHiddenFrames)
@@ -148,7 +144,6 @@ void addKey(int key,string &encodedKey){
 void encodeImage(Mat &imageToEncode,int frame,string keyForEncode,string &encodedKey){
     if(keyForEncode!=""  && keyForEncode.size()>0) {
         set<int> numbers = genRandomNumbers(keyForEncode.size(), imageToEncode.rows, imageToEncode.cols);
-#pragma omp parallel
 #pragma omp parallel for
         for (int i = 0; i < keyForEncode.size(); i++) {
             Point_<int> po;
@@ -181,8 +176,6 @@ void createVideo(VideoCapture inputVideo,VideoWriter &outputVideo,string keyForE
     int i = 1;
     int frameNumber = inputVideo.get(CAP_PROP_FRAME_COUNT);
     int modOfFrames = keyForEncode.size()/frameNumber + 1;
-#pragma omp parallel
-#pragma omp while
     while (i++) {
         Mat frame;
         inputVideo >> frame;
@@ -445,8 +438,7 @@ void getOutPutFile(string &outPutFileName,string fileName ){
 }
 
 void convolutionFrame(Mat &imageToConvolute,float matrix[3][3],float edge,int frame ){
-#pragma omp parallel
-#pragma omp parallel for reduction(+:i,j)
+#pragma omp parallel for
     for(int i=0;i<imageToConvolute.rows;i++){
         for(int j=0;j<imageToConvolute.cols;j++){
             Mat_<float> custom(3, 3);
@@ -496,8 +488,6 @@ void convolution(int typeOfMedia,string fileName,float matrix[3][3],float edge,s
             VideoWriter outputVideo;
             createVideoHeading(videoToConvolute, outPutFileName,outputVideo);
             int i=-1;
-#pragma omp parallel
-#pragma omp while
             while (true) {
                 Mat frame;
                 videoToConvolute >> frame;
