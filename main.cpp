@@ -3,6 +3,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
 #include <omp.h>
+#include <fstream>
 
 using namespace std;
 using namespace cv;
@@ -54,13 +55,10 @@ void decodeImageIndex(Mat imageToDecode,int col,int row,int frm,string &decodedK
     Point_<int> po;
     po.y = row;
     po.x = col;
-    float keyAsInt = imageToDecode.at<cv::Vec2f>(po)[0];
-    unsigned char frame = imageToDecode.at<cv::Vec2f>(po)[1];
+    unsigned int keyAsInt = imageToDecode.at<cv::Vec2i>(po)[0];
+    int frame = imageToDecode.at<cv::Vec2i>(po)[1];
 
-
-    cout<<"frame "<<frm<<" decode pix x "<<po.x<< " pix y "<<po.y<<" key "<< (char)keyAsInt<< " frame "<<frame<<endl;
-
-    decodedKeyFromMedia.push_back((unsigned char )keyAsInt);
+    decodedKeyFromMedia.push_back((unsigned char) keyAsInt);
 }
 
 /**
@@ -151,12 +149,9 @@ void encodeImage(Mat &imageToEncode,int frame,string keyForEncode,string &encode
             po.y = *next(numbers.begin(), i * 2 + 1);
 
             //hide Key
-            float keyAsInt = keyForEncode.at(i);
-            imageToEncode.at<cv::Vec2f>(po)[0]=keyAsInt;
-            imageToEncode.at<cv::Vec2f>(po)[1]=frame;
-
-
-            cout<<"frame :"<< frame<<" encode pix x "<<po.x<< " pix y "<<po.y<<" keyAsInt "<<(unsigned char)keyAsInt<<endl;
+            unsigned int  keyAsInt = keyForEncode.at(i);
+            imageToEncode.at<cv::Vec2i>(po)[0]=keyAsInt;
+            imageToEncode.at<cv::Vec2i>(po)[1]=frame;
 
             //gen key location
             addKey(po.y,encodedKey);
@@ -437,23 +432,20 @@ void getOutPutFile(string &outPutFileName,string fileName ){
     outPutFileName = "./out."+NAME;
 }
 
-void convolutionFrame(Mat &imageToConvolute,float matrix[3][3],float edge,int frame ){
+void convolutionFrame(Mat &imageToConvolute,float** matrix,float edge,int frame,int size ){
 #pragma omp parallel for
+    cout<<imageToConvolute.rows<<"*"<<imageToConvolute.cols<<endl;
     for(int i=0;i<imageToConvolute.rows;i++){
         for(int j=0;j<imageToConvolute.cols;j++){
-            Mat_<float> custom(3, 3);
-            cout<<"I*J "<<i<<"*"<<j<<" frame "<<frame<< " b - "<< imageToConvolute.at<float>(i,j);
-            imageToConvolute.at<float>(i,j)=
-                    + i<1 && j<1? edge : imageToConvolute.at<float>(i-1,j-1)*matrix[0][0]
-                    + i<1 ?       edge: imageToConvolute.at<float>(i-1,j)*matrix[1][0]
-                    + i<1 ?       edge: imageToConvolute.at<float>(i-1,j+1)*matrix[2][0]
-                    + j<1 ?       edge: imageToConvolute.at<float>(i,j-1)*matrix[0][1]
-                    + imageToConvolute.at<float>(i,j)*matrix[1][1]
-                    + imageToConvolute.at<float>(i,j+1)*matrix[2][1]
-                    + j<1 ?       edge: imageToConvolute.at<float>(i+1,j-1)*matrix[0][2]
-                    + imageToConvolute.at<float>(i+1,j)*matrix[1][2]
-                    + imageToConvolute.at<float>(i+1,j+1)*matrix[2][2];
-            cout<<" - " << imageToConvolute.at<float>(i,j)<<endl;
+            int mod = size/2;
+            long result = 0 ;
+            for(int x=0;x<size;x++){
+                for(int y=0;y<size;y++){
+                    result += ((i)<mod || (j)<mod) ? edge: imageToConvolute.at<long>(i+x-mod,j+y-mod) * matrix[x][y];
+                }
+            }
+            imageToConvolute.at<long>(i,j)=result;
+
 
         }
 
@@ -469,14 +461,14 @@ void convolutionFrame(Mat &imageToConvolute,float matrix[3][3],float edge,int fr
  * @param edge
  * @param outPutFileName
  */
-void convolution(int typeOfMedia,string fileName,float matrix[3][3],float edge,string outPutFileName){
+void convolution(int typeOfMedia,string fileName,float** matrix,float edge,string outPutFileName,int size) {
     Mat_<float> custom(3, 3);
     if (typeOfMedia == 1) {
         Mat imageToConvolute = imread(fileName);
         if (imageToConvolute.empty()) {
             cerr<< "Not a valid image file "<< fileName<< endl;
         } else {
-            convolutionFrame(imageToConvolute,matrix,edge,1 );
+            convolutionFrame(imageToConvolute,matrix,edge,1 ,size);
             imwrite(outPutFileName, imageToConvolute);
             cout<<"create file   in "<<outPutFileName;
         }
@@ -493,7 +485,7 @@ void convolution(int typeOfMedia,string fileName,float matrix[3][3],float edge,s
                 videoToConvolute >> frame;
                 if (frame.empty())
                     break;
-                convolutionFrame(frame,matrix,edge,i++ );
+                convolutionFrame(frame,matrix,edge,i++,size );
                 outputVideo<<frame;
                 namedWindow("Creating Your video ", cv::WINDOW_AUTOSIZE);
                 imshow("frames ", frame);
@@ -524,13 +516,14 @@ void getFileType(char** argv, string &fileName,int typeOfMedia){
  * @return
  */
 int main(int argc, char** argv) {
-
+    srand (time(NULL));
     int option;//1 for encode any for decode
     int typeOfMedia;//1 is for Image any for video
     string fileName;//fileName relative or absolute path
     string outPutFileName;
-
-
+    int size = 0;
+    int multiplier =1;
+    float **matrix;
     string msgToEncode = "";
     string decodedMsg = "";
     string decodeKeyLocation = "";
@@ -539,7 +532,6 @@ int main(int argc, char** argv) {
     string keyForDecode = "";
     string keyForEncode = "";
     string encodedKey = "";
-    float matrix[3][3];
 
     cout<< "0 - for apply filter  1- Encode 0- Decode"<< endl;
     cin>> option;
@@ -552,16 +544,31 @@ int main(int argc, char** argv) {
         getFileType(argv, fileName, typeOfMedia);
         getOutPutFile( outPutFileName,fileName );
         float edge;
+        cout<< "matrix size (odd number):"<< endl;
+        while(true) {
+            cin >> size;
+            if (size % 2 == 0) {
+                cout << "invalid size try again" << endl;
+            }
+            else{
+                break;
+            }
+        }
+        cout<< "matrix multiplier (-1 for divide) :"<< endl;
+        cin>> multiplier;
+        matrix = new  float*[size];
         cout << " elements for filter : "<<endl;
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
+        for (int i = 0; i < size; i++) {
+            matrix[i] = new  float[size];
+            for (int j = 0; j < size; j++) {
                 cout << " element in " << i + 1 << " * " << j + 1 << " : ";
                 cin >> matrix[i][j];
+                matrix[i][j] =  (multiplier>0)?matrix[i][j]*multiplier:matrix[i][j]/multiplier;
             }
         }
         cout << " elements for edge : "<<endl;
         cin >> edge;
-        convolution( typeOfMedia, fileName, matrix, edge, outPutFileName);
+        convolution( typeOfMedia, fileName, matrix, edge, outPutFileName,size);
     }
     else if(option == 1) {
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
